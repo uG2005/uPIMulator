@@ -32,7 +32,6 @@ type InterRankControlQ struct {
 	// Per-rank delivery tracking
 	pendingMessages map[string][]*InterRankMessage // channel-rank -> messages
 
-	// Statistics
 	totalMessages         int64
 	totalBroadcasts       int64
 	totalBytesTransferred int64
@@ -40,7 +39,6 @@ type InterRankControlQ struct {
 	messageIDCounter      int
 }
 
-// Init initializes the inter-rank control queue
 func (irq *InterRankControlQ) Init(numChannels, numRanks, busWidth int, bandwidth int64) {
 	if numChannels <= 0 || numRanks <= 0 || busWidth <= 0 {
 		panic(errors.New("invalid inter-rank control dimensions"))
@@ -61,7 +59,6 @@ func (irq *InterRankControlQ) Init(numChannels, numRanks, busWidth int, bandwidt
 	irq.cycles = 0
 	irq.messageIDCounter = 0
 
-	// Initialize per-rank message buffers
 	for ch := 0; ch < numChannels; ch++ {
 		for r := 0; r < numRanks; r++ {
 			key := irq.makeKey(ch, r)
@@ -204,7 +201,6 @@ func (irq *InterRankControlQ) Read(channelID, rank int) ([]*InterRankMessage, er
 	return result, nil
 }
 
-// GetStatistics returns statistics about inter-rank communication
 func (irq *InterRankControlQ) GetStatistics() map[string]interface{} {
 	irq.mu.RLock()
 	defer irq.mu.RUnlock()
@@ -229,7 +225,6 @@ func (irq *InterRankControlQ) GetStatistics() map[string]interface{} {
 	return stats
 }
 
-// IsEmpty checks if the message queue is empty
 func (irq *InterRankControlQ) IsEmpty() bool {
 	irq.mu.RLock()
 	defer irq.mu.RUnlock()
@@ -237,7 +232,6 @@ func (irq *InterRankControlQ) IsEmpty() bool {
 	return len(irq.messageQueue) == 0
 }
 
-// GetPendingCount returns the number of pending messages for a rank
 func (irq *InterRankControlQ) GetPendingCount(channelID, rank int) (int, error) {
 	irq.mu.RLock()
 	defer irq.mu.RUnlock()
@@ -250,7 +244,6 @@ func (irq *InterRankControlQ) GetPendingCount(channelID, rank int) (int, error) 
 	return len(irq.pendingMessages[key]), nil
 }
 
-// Clear clears pending messages for a specific rank
 func (irq *InterRankControlQ) Clear(channelID, rank int) {
 	irq.mu.Lock()
 	defer irq.mu.Unlock()
@@ -259,7 +252,6 @@ func (irq *InterRankControlQ) Clear(channelID, rank int) {
 	irq.pendingMessages[key] = make([]*InterRankMessage, 0)
 }
 
-// Helper functions
 func (irq *InterRankControlQ) makeKey(channelID, rankID int) string {
 	return fmt.Sprintf("%d-%d", channelID, rankID)
 }

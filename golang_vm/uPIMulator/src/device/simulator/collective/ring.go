@@ -1,4 +1,3 @@
-// File: simulator/collective/ring.go
 package collective
 
 import (
@@ -6,7 +5,6 @@ import (
 	"uPIMulator/src/device/simulator/interconnect"
 )
 
-// RingTopology represents a ring arrangement of DPUs
 type RingTopology struct {
 	numNodes int
 	network  *interconnect.MeshNetwork
@@ -16,20 +14,16 @@ type RingTopology struct {
 		x, y int // Position in mesh
 	}
 	
-	// Statistics
 	totalMessages int64
 	totalLatency  int64
 	cycles        int64
 }
 
-// Init initializes the ring topology
 func (rt *RingTopology) Init(network *interconnect.MeshNetwork, numNodes int) {
 	rt.network = network
 	rt.numNodes = numNodes
 	rt.nodePositions = make([]struct{ x, y int }, numNodes)
 	
-	// Map nodes to mesh positions
-	// For 32 nodes in 4x8 mesh: map linearly
 	for i := 0; i < numNodes; i++ {
 		rt.nodePositions[i].x = i / 8  // channel/rank
 		rt.nodePositions[i].y = i % 8  // DPU within rank
@@ -38,17 +32,14 @@ func (rt *RingTopology) Init(network *interconnect.MeshNetwork, numNodes int) {
 	fmt.Printf("✓ Ring topology initialized with %d nodes\n", numNodes)
 }
 
-// GetNextNode returns the next node in the ring
 func (rt *RingTopology) GetNextNode(nodeID int) int {
 	return (nodeID + 1) % rt.numNodes
 }
 
-// GetPrevNode returns the previous node in the ring
 func (rt *RingTopology) GetPrevNode(nodeID int) int {
 	return (nodeID - 1 + rt.numNodes) % rt.numNodes
 }
 
-// SendToNext sends data from nodeID to next node in ring
 func (rt *RingTopology) SendToNext(nodeID int, data []byte) error {
 	nextNode := rt.GetNextNode(nodeID)
 	
@@ -66,7 +57,6 @@ func (rt *RingTopology) SendToNext(nodeID int, data []byte) error {
 	return nil
 }
 
-// ReduceOp defines a reduction operation
 type ReduceOp int
 
 const (
@@ -121,9 +111,7 @@ func (rt *RingTopology) RingAllReduce(initialValues []int64, op ReduceOp) ([]int
 	for step := 0; step < rt.numNodes-1; step++ {
 		fmt.Printf("  Step %d:\n", step+1)
 		
-		// Each node sends to next
 		for nodeID := 0; nodeID < rt.numNodes; nodeID++ {
-			// Encode value as bytes
 			data := encodeInt64(nodeValues[nodeID])
 			err := rt.SendToNext(nodeID, data)
 			if err != nil {
@@ -131,7 +119,6 @@ func (rt *RingTopology) RingAllReduce(initialValues []int64, op ReduceOp) ([]int
 			}
 		}
 		
-		// Run network until all packets delivered
 		if !rt.network.RunUntilEmpty(1000) {
 			return nil, fmt.Errorf("network timeout at step %d", step)
 		}
@@ -152,7 +139,6 @@ func (rt *RingTopology) RingAllReduce(initialValues []int64, op ReduceOp) ([]int
 	for step := 0; step < rt.numNodes-1; step++ {
 		fmt.Printf("  Step %d:\n", step+1)
 		
-		// Each node sends its value to next
 		for nodeID := 0; nodeID < rt.numNodes; nodeID++ {
 			data := encodeInt64(nodeValues[nodeID])
 			err := rt.SendToNext(nodeID, data)
@@ -198,9 +184,7 @@ func (rt *RingTopology) RingAllReduceSimple(initialValues []int64, op ReduceOp) 
 			totalSum += val
 		}
 		
-		// Simulate N-1 communication rounds
 		for step := 0; step < rt.numNodes-1; step++ {
-			// Each node sends to next
 			for nodeID := 0; nodeID < rt.numNodes; nodeID++ {
 				data := encodeInt64(initialValues[nodeID])
 				rt.SendToNext(nodeID, data)
@@ -239,7 +223,6 @@ func (rt *RingTopology) RingAllReduceSimple(initialValues []int64, op ReduceOp) 
 	return currentValues[0], nil
 }
 
-// GetStatistics returns ring topology statistics
 func (rt *RingTopology) GetStatistics() map[string]interface{} {
 	stats := make(map[string]interface{})
 	stats["num_nodes"] = rt.numNodes
@@ -253,7 +236,6 @@ func (rt *RingTopology) GetStatistics() map[string]interface{} {
 	return stats
 }
 
-// Helper function to encode int64 as bytes
 func encodeInt64(val int64) []byte {
 	data := make([]byte, 8)
 	for i := 0; i < 8; i++ {
@@ -262,7 +244,6 @@ func encodeInt64(val int64) []byte {
 	return data
 }
 
-// Helper function to decode bytes to int64
 func decodeInt64(data []byte) int64 {
 	if len(data) < 8 {
 		return 0

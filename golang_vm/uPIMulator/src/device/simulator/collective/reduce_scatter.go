@@ -1,4 +1,3 @@
-// File: simulator/collective/reduce_scatter.go
 package collective
 
 import (
@@ -6,28 +5,23 @@ import (
 	"uPIMulator/src/device/simulator/interconnect"
 )
 
-// ReduceScatterTopology handles reduce-scatter collective operations
 type ReduceScatterTopology struct {
 	numNodes int
 	network  *interconnect.MeshNetwork
 	
-	// Node positions in mesh
 	nodePositions []struct {
 		x, y int
 	}
 	
-	// Statistics
 	totalMessages int64
 	cycles        int64
 }
 
-// Init initializes the reduce-scatter topology
 func (rst *ReduceScatterTopology) Init(network *interconnect.MeshNetwork, numNodes int) {
 	rst.network = network
 	rst.numNodes = numNodes
 	rst.nodePositions = make([]struct{ x, y int }, numNodes)
 	
-	// Map nodes to mesh positions
 	for i := 0; i < numNodes; i++ {
 		rst.nodePositions[i].x = i / 8
 		rst.nodePositions[i].y = i % 8
@@ -36,8 +30,6 @@ func (rst *ReduceScatterTopology) Init(network *interconnect.MeshNetwork, numNod
 	fmt.Printf("✓ Reduce-Scatter topology initialized: %d nodes\n", numNodes)
 }
 
-// ReduceScatter performs reduce-scatter operation
-// Each node starts with a vector of values
 // After operation, each node has ONE reduced value (its assigned chunk)
 // 
 // Example with 4 nodes, each with 4 values:
@@ -51,6 +43,7 @@ func (rst *ReduceScatterTopology) Init(network *interconnect.MeshNetwork, numNod
 // Node 1 gets: 20+2+6+10 = 38   (sum of index 1 from all nodes)
 // Node 2 gets: 30+3+7+11 = 51   (sum of index 2 from all nodes)
 // Node 3 gets: 40+4+8+12 = 64   (sum of index 3 from all nodes)
+
 func (rst *ReduceScatterTopology) ReduceScatter(
 	initialData [][]int64, // [nodeID][values]
 	op ReduceOp,
@@ -61,7 +54,6 @@ func (rst *ReduceScatterTopology) ReduceScatter(
 			len(initialData), rst.numNodes)
 	}
 	
-	// Verify all nodes have same number of values
 	chunkSize := len(initialData[0])
 	for i := 1; i < rst.numNodes; i++ {
 		if len(initialData[i]) != chunkSize {
@@ -73,10 +65,8 @@ func (rst *ReduceScatterTopology) ReduceScatter(
 	fmt.Printf("\n=== Reduce-Scatter (op=%v) ===\n", op)
 	fmt.Printf("Nodes: %d, Values per node: %d\n", rst.numNodes, chunkSize)
 	
-	// Result: each node gets one value
 	result := make([]int64, rst.numNodes)
 	
-	// Phase 1: Reduce-Scatter using ring algorithm
 	// Each node is responsible for reducing one chunk (index = nodeID)
 	for step := 0; step < rst.numNodes-1; step++ {
 		fmt.Printf("\nStep %d:\n", step+1)
@@ -101,7 +91,6 @@ func (rst *ReduceScatterTopology) ReduceScatter(
 			rst.totalMessages++
 		}
 		
-		// Wait for delivery
 		if !rst.network.RunUntilEmpty(1000) {
 			return nil, fmt.Errorf("network timeout at step %d", step)
 		}
@@ -150,7 +139,6 @@ func (rst *ReduceScatterTopology) ReduceScatterSimple(
 	// Simple approach: reduce each chunk independently
 	result := make([]int64, rst.numNodes)
 	
-	// For each chunk position
 	for chunkIdx := 0; chunkIdx < chunkSize; chunkIdx++ {
 		// Reduce values from all nodes at this chunk position
 		var reducedValue int64
@@ -167,13 +155,11 @@ func (rst *ReduceScatterTopology) ReduceScatterSimple(
 			}
 		}
 		
-		// Node responsible for this chunk gets the result
 		if chunkIdx < rst.numNodes {
 			result[chunkIdx] = reducedValue
 		}
 	}
 	
-	// Simulate communication
 	for step := 0; step < rst.numNodes-1; step++ {
 		for nodeID := 0; nodeID < rst.numNodes; nodeID++ {
 			nextNode := (nodeID + 1) % rst.numNodes
@@ -196,7 +182,7 @@ func (rst *ReduceScatterTopology) ReduceScatterSimple(
 // AllGather performs the inverse of Reduce-Scatter
 // Each node starts with one value, ends with all values
 func (rst *ReduceScatterTopology) AllGather(
-	initialValues []int64, // One value per node
+	initialValues []int64,
 ) ([][]int64, error) {
 	
 	if len(initialValues) != rst.numNodes {
@@ -207,7 +193,6 @@ func (rst *ReduceScatterTopology) AllGather(
 	fmt.Printf("Initial: %v\n", initialValues)
 	
 	// Simplified: just return same values to all nodes
-	// In real implementation, this would do ring-based gathering
 	result := make([][]int64, rst.numNodes)
 	for i := 0; i < rst.numNodes; i++ {
 		result[i] = make([]int64, rst.numNodes)
@@ -239,7 +224,6 @@ func (rst *ReduceScatterTopology) AllGather(
 	return result, nil
 }
 
-// GetStatistics returns topology statistics
 func (rst *ReduceScatterTopology) GetStatistics() map[string]interface{} {
 	stats := make(map[string]interface{})
 	stats["num_nodes"] = rst.numNodes
@@ -253,7 +237,6 @@ func (rst *ReduceScatterTopology) GetStatistics() map[string]interface{} {
 	return stats
 }
 
-// Helper function to encode int64 array as bytes
 func encodeInt64Array(values []int64) []byte {
 	data := make([]byte, len(values)*8)
 	for i, val := range values {
@@ -264,7 +247,6 @@ func encodeInt64Array(values []int64) []byte {
 	return data
 }
 
-// Helper function to decode bytes to int64 array
 func decodeInt64Array(data []byte) []int64 {
 	if len(data)%8 != 0 {
 		return nil

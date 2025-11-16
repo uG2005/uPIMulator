@@ -1,4 +1,3 @@
-// File: simulator/interconnect/inter_chip_switch.go
 package interconnect
 
 import (
@@ -9,15 +8,14 @@ import (
 // DQPinPartition represents DQ (Data) pin partitioning
 // Splits the wide data bus into multiple narrow channels
 type DQPinPartition struct {
-	totalPins      int // Total DQ pins (e.g., 64 for DDR4)
-	numChannels    int // Number of channels to partition into
-	pinsPerChannel int // Pins allocated per channel
+	totalPins      int
+	numChannels    int
+	pinsPerChannel int
 	
 	// Pin assignment: which pins belong to which channel
-	channelPins map[int][]int // channelID -> pin numbers
+	channelPins map[int][]int
 }
 
-// Init initializes DQ pin partitioning
 func (dq *DQPinPartition) Init(totalPins, numChannels int) error {
 	if totalPins%numChannels != 0 {
 		return fmt.Errorf("totalPins %d not evenly divisible by numChannels %d", 
@@ -44,12 +42,10 @@ func (dq *DQPinPartition) Init(totalPins, numChannels int) error {
 	return nil
 }
 
-// GetChannelPins returns pin numbers for a channel
 func (dq *DQPinPartition) GetChannelPins(channelID int) []int {
 	return dq.channelPins[channelID]
 }
 
-// GetChannelBandwidth returns bandwidth per channel (bits)
 func (dq *DQPinPartition) GetChannelBandwidth() int {
 	return dq.pinsPerChannel
 }
@@ -69,13 +65,11 @@ type CrossbarSwitch struct {
 	// Reverse mapping: outputID -> inputID
 	reverseConnections []int
 	
-	// Statistics
 	totalSwitches int64
 	blockedAttempts int64
 	cycles int64
 }
 
-// Init initializes the crossbar switch
 func (cs *CrossbarSwitch) Init(numInputs, numOutputs int) {
 	cs.numInputs = numInputs
 	cs.numOutputs = numOutputs
@@ -85,7 +79,7 @@ func (cs *CrossbarSwitch) Init(numInputs, numOutputs int) {
 	cs.reverseConnections = make([]int, numOutputs)
 	
 	for i := 0; i < numInputs; i++ {
-		cs.connections[i] = -1 // Not connected
+		cs.connections[i] = -1
 	}
 	for i := 0; i < numOutputs; i++ {
 		cs.reverseConnections[i] = -1
@@ -107,19 +101,16 @@ func (cs *CrossbarSwitch) Connect(inputID, outputID int) bool {
 		return false
 	}
 	
-	// Check if output is already connected
 	if cs.reverseConnections[outputID] != -1 {
 		cs.blockedAttempts++
-		return false // Output busy
+		return false
 	}
 	
-	// Disconnect previous connection if any
 	if cs.connections[inputID] != -1 {
 		prevOutput := cs.connections[inputID]
 		cs.reverseConnections[prevOutput] = -1
 	}
 	
-	// Make new connection
 	cs.connections[inputID] = outputID
 	cs.reverseConnections[outputID] = inputID
 	cs.totalSwitches++
@@ -127,7 +118,6 @@ func (cs *CrossbarSwitch) Connect(inputID, outputID int) bool {
 	return true
 }
 
-// Disconnect removes a connection
 func (cs *CrossbarSwitch) Disconnect(inputID int) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
@@ -143,7 +133,6 @@ func (cs *CrossbarSwitch) Disconnect(inputID int) {
 	}
 }
 
-// IsConnected checks if an input is connected
 func (cs *CrossbarSwitch) IsConnected(inputID int) bool {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
@@ -151,7 +140,6 @@ func (cs *CrossbarSwitch) IsConnected(inputID int) bool {
 	return cs.connections[inputID] != -1
 }
 
-// GetConnection returns the output connected to an input
 func (cs *CrossbarSwitch) GetConnection(inputID int) int {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
@@ -159,7 +147,6 @@ func (cs *CrossbarSwitch) GetConnection(inputID int) int {
 	return cs.connections[inputID]
 }
 
-// DisconnectAll clears all connections
 func (cs *CrossbarSwitch) DisconnectAll() {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
@@ -172,12 +159,10 @@ func (cs *CrossbarSwitch) DisconnectAll() {
 	}
 }
 
-// Cycle processes one cycle
 func (cs *CrossbarSwitch) Cycle() {
 	cs.cycles++
 }
 
-// GetStatistics returns crossbar statistics
 func (cs *CrossbarSwitch) GetStatistics() map[string]interface{} {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
@@ -194,7 +179,6 @@ func (cs *CrossbarSwitch) GetStatistics() map[string]interface{} {
 		stats["block_rate"] = blockRate
 	}
 	
-	// Count active connections
 	activeCount := 0
 	for _, conn := range cs.connections {
 		if conn != -1 {
@@ -217,13 +201,11 @@ type InterChipSwitch struct {
 	activeTransfers map[int]*ChipTransfer // transferID -> transfer
 	nextTransferID  int
 	
-	// Statistics
 	totalTransfers int64
 	totalBytes     int64
 	cycles         int64
 }
 
-// ChipTransfer represents a transfer between chips
 type ChipTransfer struct {
 	TransferID int
 	SrcChipID  int
@@ -234,7 +216,6 @@ type ChipTransfer struct {
 	EndCycle   int64
 }
 
-// Init initializes the inter-chip switch
 func (ics *InterChipSwitch) Init(numChips, totalDQPins, numChannels int) error {
 	ics.numChips = numChips
 	
@@ -258,7 +239,6 @@ func (ics *InterChipSwitch) Init(numChips, totalDQPins, numChannels int) error {
 	return nil
 }
 
-// StartTransfer initiates a transfer between chips
 func (ics *InterChipSwitch) StartTransfer(srcChip, dstChip, channelID int, data []byte) (int, error) {
 	if srcChip < 0 || srcChip >= ics.numChips {
 		return -1, fmt.Errorf("invalid source chip: %d", srcChip)
@@ -294,7 +274,6 @@ func (ics *InterChipSwitch) StartTransfer(srcChip, dstChip, channelID int, data 
 	return transfer.TransferID, nil
 }
 
-// CompleteTransfer marks a transfer as complete
 func (ics *InterChipSwitch) CompleteTransfer(transferID int) error {
 	transfer, exists := ics.activeTransfers[transferID]
 	if !exists {
@@ -311,13 +290,11 @@ func (ics *InterChipSwitch) CompleteTransfer(transferID int) error {
 	return nil
 }
 
-// Cycle advances one cycle
 func (ics *InterChipSwitch) Cycle() {
 	ics.crossbar.Cycle()
 	ics.cycles++
 }
 
-// GetStatistics returns switch statistics
 func (ics *InterChipSwitch) GetStatistics() map[string]interface{} {
 	stats := make(map[string]interface{})
 	stats["num_chips"] = ics.numChips
@@ -333,7 +310,6 @@ func (ics *InterChipSwitch) GetStatistics() map[string]interface{} {
 		stats["avg_bytes_per_transfer"] = float64(ics.totalBytes) / float64(ics.totalTransfers)
 	}
 	
-	// Include crossbar stats
 	crossbarStats := ics.crossbar.GetStatistics()
 	stats["crossbar_switches"] = crossbarStats["total_switches"]
 	stats["crossbar_blocks"] = crossbarStats["blocked_attempts"]
