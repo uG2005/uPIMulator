@@ -2,56 +2,116 @@
 
 ## Executive Summary
 
-uPIMulator is a cycle-accurate simulator for Processing-in-Memory (PIM) systems that balances simulation accuracy against speed through principled architectural trade-offs. This document evaluates the major design decisions covering hardware complexity, DRAM constraints, interconnect architecture, software-hardware co-design, and future extensions.
+uPIMulator is a cycle-accurate simulator for Processing-in-Memory (PIM) systems that balances simulation accuracy against 
+speed through principled architectural trade-offs. This document evaluates the major design decisions covering hardware 
+complexity, DRAM constraints, interconnect architecture, software-hardware co-design, and future extensions.
 
 ## 1. Hardware Complexity vs Simulation Accuracy
+**Trade-off**: 
+Cycle-level accuracy (high cost in simulation time) vs performance (limited to 32 DPUs, ~90 minutes per benchmark).
+uPIMulator simulates a complete hardware stack: 14-stage DPU pipeline (~5,700 LOC), thread scheduler (11-cycle dispatch), 
+30+ instruction ALU, 4-level memory hierarchy (IRAM 64KB, WRAM 32KB, MRAM 256MB, Host DRAM), and cycle-accurate DRAM controller
+with row buffer modeling. Each component contributes to accuracy but increases simulation complexity exponentially.
 
-**Trade-off**: Cycle-level accuracy (high cost in simulation time) vs performance (limited to 32 DPUs, ~90 minutes per benchmark).
+**Key Metrics**: 
+15,000 LOC device-side code, 8,000 LOC host-side VM, 50+ test cases. Alternative approaches (event-level simulation or 
+analytical models) would run 10-100x faster but sacrifice bottleneck visibility critical for algorithm-architecture 
+co-optimization.
 
-uPIMulator simulates a complete hardware stack: 14-stage DPU pipeline (~5,700 LOC), thread scheduler (11-cycle dispatch), 30+ instruction ALU, 4-level memory hierarchy (IRAM 64KB, WRAM 32KB, MRAM 256MB, Host DRAM), and cycle-accurate DRAM controller with row buffer modeling. Each component contributes to accuracy but increases simulation complexity exponentially.
+**Decision**: 
+Accept simulation speed limitation for high-fidelity analysis. Sufficient for research (1-32 DPUs); 
+larger systems require different paradigm (trace-based or distributed simulation).
 
-**Key Metrics**: 15,000 LOC device-side code, 8,000 LOC host-side VM, 50+ test cases. Alternative approaches (event-level simulation or analytical models) would run 10-100x faster but sacrifice bottleneck visibility critical for algorithm-architecture co-optimization.
 
-**Decision**: Accept simulation speed limitation for high-fidelity analysis. Sufficient for research (1-32 DPUs); larger systems require different paradigm (trace-based or distributed simulation).
+
+
+
 
 ## 2. DRAM Limitations and Memory Bandwidth Bottlenecks
 
 **Primary Bottleneck**: Memory bandwidth (60-80% of cycles in memory-bound workloads waiting on MRAM).
 
-DRAM timing dominates performance: t_RCD=11, t_RAS=32, t_CL=11, t_BL=5, t_RP=11 cycles (total ~27 cycles minimum per access). Achieves only 1.5 bytes/cycle vs theoretical 8 bytes. Row buffer hits improve performance 2.5x; misses worsen by 1.4x. Per-rank MRAM chosen over shared-bus design to avoid inter-rank contention at cost of complex DMA coordination.
+DRAM timing dominates performance: t_RCD=11, t_RAS=32, t_CL=11, t_BL=5, t_RP=11 cycles (total ~27 cycles minimum per access). 
+Achieves only 1.5 bytes/cycle vs theoretical 8 bytes. Row buffer hits improve performance 2.5x; misses worsen by 1.4x. 
+Per-rank MRAM chosen over shared-bus design to avoid inter-rank contention at cost of complex DMA coordination.
 
-**Multi-Rank Challenge**: Local-rank access ~30 cycles; same-chip different-rank ~60 cycles; inter-chip >100 cycles. Network bandwidth (1 packet/cycle per router) couples with memory demand—high MRAM traffic causes network congestion. FR-FCFS scheduling provides 40-60% reordering benefit but complexity is justified for accuracy.
+**Multi-Rank Challenge**: Local-rank access ~30 cycles; same-chip different-rank ~60 cycles; inter-chip >100 cycles. 
+Network bandwidth (1 packet/cycle per router) couples with memory demand—high MRAM traffic causes network congestion. 
+FR-FCFS scheduling provides 40-60% reordering benefit but complexity is justified for accuracy.
 
-**Implication**: Sequential algorithms vastly outperform random-access patterns; algorithm selection (memory-aware design) more critical than CPU frequency. Memory is the PIM bottleneck, not computation.
+**Implication**: Sequential algorithms vastly outperform random-access patterns; algorithm selection (memory-aware design) more 
+critical than CPU frequency. Memory is the PIM bottleneck, not computation.
+
+
+
+
 
 ## 3. Interconnect Architecture Design
 
-**Router Design**: Bufferless routers chosen (no per-router packet buffers) to reduce hardware complexity and enable clear congestion visualization. Alternative buffered routers would improve throughput 20-30% but add 2-3x simulation complexity, unjustified for current 32-DPU scale.
+**Router Design**: 
+Bufferless routers chosen (no per-router packet buffers) to reduce hardware complexity and enable clear 
+congestion visualization. Alternative buffered routers would improve throughput 20-30% but add 2-3x simulation complexity, 
+unjustified for current 32-DPU scale.
 
-**Routing Algorithms**: Three deterministic algorithms implemented: XY (lowest latency but poor congestion), YX (balances traffic), West-First (best for collectives, prevents hot-spots). Deadlock prevention via algorithm guarantees rather than virtual channels (planned for 64+ DPU systems).
+**Routing Algorithms**: T
+hree deterministic algorithms implemented: XY (lowest latency but poor congestion), YX (balances traffic), 
+West-First (best for collectives, prevents hot-spots). Deadlock prevention via algorithm guarantees rather than virtual channels 
+(planned for 64+ DPU systems).
 
-**Topology**: 2D Mesh (48, 32 routers) chosen for simplicity and sufficient bisection width. Packet size 64 bytes balances throughput vs latency. Backpressure mechanism (no packet drops) ensures correctness at cost of increased latency during congestion. Statistics track packetsRouted, packetsBlocked, totalHops for congestion analysis.
+**Topology**: 
+2D Mesh (48, 32 routers) chosen for simplicity and sufficient bisection width. Packet size 64 bytes balances 
+throughput vs latency. Backpressure mechanism (no packet drops) ensures correctness at cost of increased latency during 
+congestion. Statistics track packetsRouted, packetsBlocked, totalHops for congestion analysis.
 
-**Trade-off**: Simplicity and clear bottleneck visibility (bufferless, deterministic routing) vs throughput (accepting packet blocking). Scales to 32 DPUs; 64+ requires buffered routers and virtual channels.
+**Trade-off**: 
+Simplicity and clear bottleneck visibility (bufferless, deterministic routing) vs throughput (accepting packet blocking). 
+Scales to 32 DPUs; 64+ requires buffered routers and virtual channels.
+
+
+
+
+
 
 ## 4. Software-Hardware Co-design
 
-**Host VM Constraints**: Interpretable subset-of-C grammar (no floating-point, no nested pointers, no switch/case, no printf). Supports malloc/free, structs, single-level pointers, basic control flow, and UPMEM SDK functions.
+**Host VM Constraints**: 
+Interpretable subset-of-C grammar (no floating-point, no nested pointers, no switch/case, no printf). Supports malloc/free, 
+structs, single-level pointers, basic control flow, and UPMEM SDK functions.
 
-**Design Choice**: Bytecode interpretation chosen over JIT compilation for portability and debuggability, accepting ~2-3x interpreter overhead. Stack-based VM simpler than register-based but higher memory traffic.
+**Design Choice**: 
+Bytecode interpretation chosen over JIT compilation for portability and debuggability, accepting ~2-3x interpreter overhead. 
+Stack-based VM simpler than register-based but higher memory traffic.
 
-**Impact**: Cannot run unmodified UPMEM code; floating-point algorithms unsupported; printf debugging absent. Trade-off justified for 13/16 PrIM benchmarks working without modification. Long-term: LLVM integration for production code support (future milestone).
+**Impact**: 
+Cannot run unmodified UPMEM code; floating-point algorithms unsupported; printf debugging absent. Trade-off justified for 13/16 
+PrIM benchmarks working without modification. Long-term: LLVM integration for production code support (future milestone).
 
-**Language Limitation**: 4 basic data types force 64-bit arithmetic, limiting precision for some applications but simplifying implementation. Acceptable for compute-intensive PIM workloads (most algorithms don't require floating-point).
+**Language Limitation**: 
+4 basic data types force 64-bit arithmetic, limiting precision for some applications but simplifying implementation. Acceptable 
+for compute-intensive PIM workloads (most algorithms don't require floating-point).
+
+
+
+
+
 
 ## 5. Scalability and Future Extensions
 
-**Current Scaling**: DPU count scales O(DPU) due to router simulation. 1 DPU ~5 min, 32 DPUs ~90+ min. Network becomes dominant bottleneck >16 DPUs. Memory access patterns determine actual performance more than DPU count.
+**Current Scaling**: 
+DPU count scales O(DPU) due to router simulation. 1 DPU ~5 min, 32 DPUs ~90+ min. Network becomes dominant bottleneck >16 DPUs. 
+Memory access patterns determine actual performance more than DPU count.
 
-**Immediate Priorities** (0-6 months): (1) Extend to 64 DPUs via buffered routers (+2 weeks), (2) Complete collectives (AllGather, AllToAll, +4 weeks), (3) Performance profiling tools (+2 weeks).
+**Immediate Priorities** (0-6 months): 
+(1) Extend to 64 DPUs via buffered routers (+2 weeks), (2) Complete collectives (AllGather, AllToAll, +4 weeks), 
+(3) Performance profiling tools (+2 weeks).
 
-**Medium-term** (6-18 months): Virtual channels for adaptive routing, L1/L2 cache hierarchy, heterogeneous DPU support, parallel DPU simulation.
+**Medium-term** (6-18 months): 
+Virtual channels for adaptive routing, L1/L2 cache hierarchy, heterogeneous DPU support, parallel DPU simulation.
 
-**Long-term** (18+ months): ML-based performance prediction, automated hardware optimization, UPMEM SDK integration, <5% production prediction error, cross-layer optimization framework.
+**Long-term** (18+ months): 
+ML-based performance prediction, automated hardware optimization, UPMEM SDK integration, <5% production prediction error, 
+cross-layer optimization framework.
 
-**Research Roadmap**: (1) BufferlessBuffered routers, (2) Trace-based simulator for 1000+ DPUs, (3) GPU-accelerated routing, (4) Distributed simulation, (5) Hardware synthesis from simulation results.
+**Research Roadmap**: 
+(1) BufferlessBuffered routers, (2) Trace-based simulator for 1000+ DPUs, (3) GPU-accelerated routing, (4) Distributed simulation, 
+(5) Hardware synthesis from simulation results.

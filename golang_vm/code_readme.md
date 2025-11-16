@@ -1,8 +1,88 @@
+# 📋 Recent Work & Infrastructure Additions
+
+## Interconnect Module for Inter-DPU Communication (Nov 5, 2025)
+Initial interconnect module implementation enabling inter-DPU communication with DPU transfer tests and infrastructure. This provides the foundation for all subsequent collective communication features.
+
+## Router and Mesh Network for PIMnet (Nov 5, 2025)
+
+### Bufferless Router Implementation
+- 5-port architecture (North/South/East/West/Local)
+- Three routing algorithms: XY, YX, and West-First routing
+- Backpressure mechanism for congestion control
+- Cycle-accurate simulation with multi-hop packet routing
+- Statistics tracking (routed packets, blocked packets, average hops)
+
+### 2D Mesh Network
+- Topology connecting 32 routers in a 4×8 grid
+- Parallel router operation simulation
+- Automatic packet delivery tracking
+- Network-wide statistics (latency, throughput, congestion)
+- Support for multiple concurrent packets
+
+## Ring AllReduce Collective Primitive (Nov 5, 2025)
+- Logical ring topology connecting up to 32 DPUs
+- Ring traversal pattern: node i → node (i+1) mod N
+- **AllReduce Operations:** SUM, MAX, MIN, PROD
+- **Algorithm:** 2-phase approach
+  - Reduce-Scatter phase: N-1 steps to distribute reduced chunks
+  - AllGather phase: N-1 steps to propagate final result
+- **Performance:** 
+  - 4 nodes: ~38 μs per AllReduce
+  - 32 nodes: ~1.3 ms per AllReduce
+- 8 comprehensive tests passing
+
+## Broadcast and Reduce-Scatter Collective Primitives (Nov 10, 2025)
+
+### Broadcast Implementation
+- Binary tree topology
+- O(log N) latency for message propagation
+- Optimized for up to 32 DPUs
+
+### Reduce-Scatter Implementation
+- Distributed gradient aggregation
+- AllGather inverse operation
+- Multiple reduction operations: SUM, MAX, MIN, PROD
+
+**Test Coverage:** 24 collective operation tests passing (8 Ring AllReduce + 7 Broadcast + 9 Reduce-Scatter)
+
+## Inter-Chip Switch with DQ Pin Partitioning (Nov 10, 2025)
+
+### DQ Pin Partitioning
+- Flexible bus partitioning (e.g., 64 pins → 8 channels × 8 bits)
+- Independent per-channel bandwidth allocation
+- Configurable channel count
+
+### Crossbar Switch
+- N×N switching matrix for any-to-any connectivity
+- Conflict detection and blocking (bufferless approach)
+- Comprehensive statistics tracking
+
+### Inter-Chip Switch Integration
+- Combines DQ partitioning with crossbar switching
+- Multi-chip transfer management
+- Cycle-accurate simulation with transfer tracking
+- 13 tests passing
+
+## Inter-Rank Control with DDR CA Bus Broadcast (Nov 11, 2025)
+- DDR Command/Address bus as broadcast channel
+- Broadcast to all ranks or selective ranks
+- Barrier synchronization primitives for multi-rank coordination
+- Rank state tracking and management
+- 12 tests passing
+
+**Microarchitecture Requirements Completion:**
+- ✓ PIMnet Stop (router)
+- ✓ Inter-chip switch
+- ✓ Inter-rank control
+
+
+
+
 # Code Documentation - golang_vm Interconnect & Collective Communication
 
 This document provides comprehensive documentation of the interconnect and collective communication infrastructure added to the uPIMulator project. All code is located in `golang_vm/uPIMulator/src/device/simulator/`.
 
----
+
 
 ## Table of Contents
 
